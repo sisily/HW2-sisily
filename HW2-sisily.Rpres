@@ -1,0 +1,128 @@
+HW2-sisily
+========================================================
+Reproduce the Figure 2 of the following paper: 
+http://www.ncbi.nlm.nih.gov/pubmed/23220997
+
+1. Get the data from GEO
+2. Normalize the data (if necessary)
+3. Use limma to test for differential expression
+4. Display the results using a heatmap [Hint: Use the pheatmap package]
+
+GSE40812
+
+========================================================
+Use all packages that we need:
+```{r}
+library(GEOmetadb)
+library(limma)
+library(reshape)
+library(pheatmap)
+```
+
+========================================================
+Process the dtat that we want
+Step1: get the data
+```{r}
+#gds <- getGEO("GSE40812", destdir = "./Data/GEO/")
+gds <- getGEO(filename = "./Data/GEO/GSE40812_series_matrix.txt.gz")
+pd<pData(gds)
+```
+
+Step2: only use "monocytes-dereived macrophage" data
+```{r}
+mmpd <- pd[pd$source_name_ch1=="Monocyte-derived Macrophage",]
+rownames(mmpd)
+mmeset <- gds[,rownames(mmpd)]
+```
+
+Step3:Sanitize the data
+```{r}
+mmpd$subj <- substring(gsub("^[A-Z][A-Z][0-9]+_","",mmpd[,'title']),1,4)
+mmpd$HCV <- gsub(".*: ", "", mmpd$characteristics_ch1)
+mmpd$HCV <- factor(ifelse(mmpd$HCV =="Neg", 1, 2))
+mmpd$Poly_IC <- tolower(gsub(".*: ","", mmpd$characteristics_ch1.2))
+mmpd$Poly_IC<- factor(ifelse(mmpd$Poly_IC == "mock",1,2))
+```
+========================================================
+Step4:use limma to design matrix to get the probesthat are differentially expressed between the "treatment" groups (p<0.05 and a fold change of > 1.5)
+```{r}
+mm_tx <- model.matrix(~Poly_IC,mmpd)
+fit_tx <- lmFit(exprs(mmeset), mm_tx)
+ebay_tx <- eBayes(fit_tx)
+Top_tx <- topTable(ebay_tx, coef="Poly_IC2", number=Inf)
+probes_tx <- Top_tx[Top_tx$adj.P.Val < 0.05 & abs(tt_tx$logFC)>log2(1.5), ]
+nrow(probes_tx)# getting 1146 probes
+```
+
+Step5: subset the pData for each subject by subtracting the subject's Poly_IC value
+```{r}
+info <- mmpd[,c('geo_accession','subj','Poly_IC','HCV')]
+ #Poly_IC = 1 is mock
+info$Poly_IC <- ifelse(info$Poly_IC == 1, -1, 1) 
+exprs.probes_tx <- exprs(mmeset)[rownames(probes_tx),]
+ #each subject has 2 GEO numbers: one corresponds to a mock and the other a poly value (-1 is mock and 1 is poly)
+info.cast <- cast(info, subj~geo_accession, value = "Poly_IC")
+rownames(info.cast) <- info.cast[,'subj']
+info.cast[is.na(info.cast)] <- 0
+exprs.probes_tx.diff <- exprs.probes_tx%*%t(info.cast)
+nrow(exprs.probes_tx.diff); ncol(exprs.probes_tx.diff)
+```
+========================================================
+Step6:design matrix again to find the probes that are differentially expressed between HCV+ anf HCV- (p<0.1)
+(1)The expression data is ordered by subject ID
+```{r}
+info.ordered <- unique(info[,c('subj','HCV')])
+info.ordered <- info.ordered[order(info.ordered$subj),] 
+```
+
+```{r}
+mm_HCV <- model.matrix(~HCV,info.ordered)
+fit_HCV <- lmFit(exprs.probes_tx.diff, mm_np)
+ebay_HCV <- eBayes(fit_np)
+Top_HCV <- topTable(ebay_np, coef="HCV2", number=Inf)
+```
+
+```{r}
+figure_probes <- Top_HCV[Top_HCV$P.Value < 0.1,]
+figure_probes <- rownames(figure_probes)
+length(figure_probes) # probe number =43
+```
+========================================================
+Reproduce the Figure 2 of the paper using heatmap: 
+Step1: calculate the z value of each probes
+```{r}
+figure_probes.exprs <- exprs.probes_tx[figure_probes,]
+
+z_scores <- function(row){
+  row <- t(as.matrix(row))
+  xbar <- mean(row)
+  sdev <- sd(row)
+  z_scores <- rep(0,ncol(row))
+  for(i in 1:ncol(row)){
+    z_scores[i] <- (row[i]-xbar)/sdev
+  }
+  return(z_scores)
+}
+
+z <- rep(0,40) 
+    for(i in 1:nrow(figure_probes.exprs)){
+  z <- rbind(z,z_scores(figure_probes.exprs[i,]))
+    }
+
+z <- z[-1,]
+colnames(z) <- subj_info$geo_accession
+```
+
+Step2:use pheatmap to creat the figure (reorder the data first)
+```{r}
+ordered <- info[order(info$HCV,info$Poly_IC,info$subj),]
+tmp <- info[order(info$Poly_IC,subj_info$HCV,info$subj),]
+order <- as.vector(tmp$geo_accession)
+
+z <- z[,order]
+colnames(z) <- tmp$subj
+
+pheatmap(z, cellwidth = 15, cellheight = 7.5,
+         cluster_rows=F, cluster_cols=F, legend=TRUE)
+
+```
