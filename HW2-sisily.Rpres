@@ -23,9 +23,8 @@ library(pheatmap)
 Process the dtat that we want
 Step1: get the data
 ```{r}
-#gds <- getGEO("GSE40812", destdir = "./Data/GEO/")
-gds <- getGEO(filename = "./Data/GEO/GSE40812_series_matrix.txt.gz")
-pd<pData(gds)
+gds <- getGEO("GSE40812", destdir = ".")
+pd<-pData(gds)
 ```
 
 Step2: only use "monocytes-dereived macrophage" data
@@ -77,9 +76,9 @@ info.ordered <- info.ordered[order(info.ordered$subj),]
 
 ```{r}
 mm_HCV <- model.matrix(~HCV,info.ordered)
-fit_HCV <- lmFit(exprs.probes_tx.diff, mm_np)
-ebay_HCV <- eBayes(fit_np)
-Top_HCV <- topTable(ebay_np, coef="HCV2", number=Inf)
+fit_HCV <- lmFit(exprs.probes_tx.diff, mm_HCV)
+ebay_HCV <- eBayes(fit_HCV)
+Top_HCV <- topTable(ebay_HCV, coef="HCV2", number=Inf)
 ```
 
 ```{r}
