@@ -23,7 +23,7 @@ library(pheatmap)
 Process the dtat that we want
 Step1: get the data
 ```{r}
-gds <- getGEO("GSE40812", destdir = ".")
+gds<- getGEO("GSE40812",destdir=".")[[1]]
 pd<-pData(gds)
 ```
 
@@ -35,6 +35,7 @@ mmeset <- gds[,rownames(mmpd)]
 ```
 
 Step3:Sanitize the data
+========================================================
 ```{r}
 mmpd$subj <- substring(gsub("^[A-Z][A-Z][0-9]+_","",mmpd[,'title']),1,4)
 mmpd$HCV <- gsub(".*: ", "", mmpd$characteristics_ch1)
@@ -42,18 +43,20 @@ mmpd$HCV <- factor(ifelse(mmpd$HCV =="Neg", 1, 2))
 mmpd$Poly_IC <- tolower(gsub(".*: ","", mmpd$characteristics_ch1.2))
 mmpd$Poly_IC<- factor(ifelse(mmpd$Poly_IC == "mock",1,2))
 ```
-========================================================
+
 Step4:use limma to design matrix to get the probesthat are differentially expressed between the "treatment" groups (p<0.05 and a fold change of > 1.5)
+========================================================
 ```{r}
 mm_tx <- model.matrix(~Poly_IC,mmpd)
 fit_tx <- lmFit(exprs(mmeset), mm_tx)
 ebay_tx <- eBayes(fit_tx)
-Top_tx <- topTable(ebay_tx, coef="Poly_IC2", number=Inf)
-probes_tx <- Top_tx[Top_tx$adj.P.Val < 0.05 & abs(tt_tx$logFC)>log2(1.5), ]
+top_tx <- topTable(ebay_tx, coef="Poly_IC2", number=Inf)
+probes_tx <- top_tx[top_tx$adj.P.Val < 0.05 & abs(top_tx$logFC)>log2(1.5), ]
 nrow(probes_tx)# getting 1146 probes
 ```
 
 Step5: subset the pData for each subject by subtracting the subject's Poly_IC value
+========================================================
 ```{r}
 info <- mmpd[,c('geo_accession','subj','Poly_IC','HCV')]
  #Poly_IC = 1 is mock
@@ -66,8 +69,9 @@ info.cast[is.na(info.cast)] <- 0
 exprs.probes_tx.diff <- exprs.probes_tx%*%t(info.cast)
 nrow(exprs.probes_tx.diff); ncol(exprs.probes_tx.diff)
 ```
-========================================================
+
 Step6:design matrix again to find the probes that are differentially expressed between HCV+ anf HCV- (p<0.1)
+========================================================
 (1)The expression data is ordered by subject ID
 ```{r}
 info.ordered <- unique(info[,c('subj','HCV')])
@@ -89,6 +93,7 @@ length(figure_probes) # probe number =43
 ========================================================
 Reproduce the Figure 2 of the paper using heatmap: 
 Step1: calculate the z value of each probes
+========================================================
 ```{r}
 figure_probes.exprs <- exprs.probes_tx[figure_probes,]
 
@@ -109,19 +114,23 @@ z <- rep(0,40)
     }
 
 z <- z[-1,]
-colnames(z) <- subj_info$geo_accession
+colnames(z) <- info$geo_accession
 ```
 
 Step2:use pheatmap to creat the figure (reorder the data first)
+========================================================
 ```{r}
 ordered <- info[order(info$HCV,info$Poly_IC,info$subj),]
-tmp <- info[order(info$Poly_IC,subj_info$HCV,info$subj),]
+tmp <- info[order(info$Poly_IC,info$HCV,info$subj),]
 order <- as.vector(tmp$geo_accession)
-
 z <- z[,order]
 colnames(z) <- tmp$subj
-
-pheatmap(z, cellwidth = 15, cellheight = 7.5,
-         cluster_rows=F, cluster_cols=F, legend=TRUE)
-
 ```
+
+========================================================
+```{r}
+pheatmap(z, cellwidth = 20, cellheight = 10,cluster_rows=F, cluster_cols=F, 
+         legend=TRUE)
+```
+
+========================================================
