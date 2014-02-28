@@ -20,21 +20,21 @@ library(pheatmap)
 ```
 
 ========================================================
-Process the dtat that we want
-Step1: get the data
+Process the data that we want
+Step 1: get the data
 ```{r}
 gds<- getGEO("GSE40812",destdir=".")[[1]]
 pd<-pData(gds)
 ```
 
-Step2: only use "monocytes-dereived macrophage" data
+Step 2: only use "monocytes-dereived macrophage" data
 ```{r}
 mmpd <- pd[pd$source_name_ch1=="Monocyte-derived Macrophage",]
 rownames(mmpd)
 mmeset <- gds[,rownames(mmpd)]
 ```
 
-Step3:Sanitize the data
+Step 3: Sanitize the data
 ========================================================
 ```{r}
 mmpd$subj <- substring(gsub("^[A-Z][A-Z][0-9]+_","",mmpd[,'title']),1,4)
@@ -44,7 +44,7 @@ mmpd$Poly_IC <- tolower(gsub(".*: ","", mmpd$characteristics_ch1.2))
 mmpd$Poly_IC<- factor(ifelse(mmpd$Poly_IC == "mock",1,2))
 ```
 
-Step4:use limma to design matrix to get the probesthat are differentially expressed between the "treatment" groups (p<0.05 and a fold change of > 1.5)
+Step 4: use limma to design matrix to get the probes that are differentially expressed between the "treatment" groups (p<0.05 and a fold change of > 1.5)
 ========================================================
 ```{r}
 mm_tx <- model.matrix(~Poly_IC,mmpd)
@@ -55,7 +55,7 @@ probes_tx <- top_tx[top_tx$adj.P.Val < 0.05 & abs(top_tx$logFC)>log2(1.5), ]
 nrow(probes_tx)# getting 1146 probes
 ```
 
-Step5: subset the pData for each subject by subtracting the subject's Poly_IC value
+Step 5: subset the pData for each subject by subtracting the subject's Poly_IC value
 ========================================================
 ```{r}
 info <- mmpd[,c('geo_accession','subj','Poly_IC','HCV')]
@@ -70,7 +70,7 @@ exprs.probes_tx.diff <- exprs.probes_tx%*%t(info.cast)
 nrow(exprs.probes_tx.diff); ncol(exprs.probes_tx.diff)
 ```
 
-Step6:design matrix again to find the probes that are differentially expressed between HCV+ anf HCV- (p<0.1)
+Step 6: design matrix again to find the probes that are differentially expressed between HCV+ and HCV- (p<0.1)
 ========================================================
 (1)The expression data is ordered by subject ID
 ```{r}
@@ -129,8 +129,7 @@ colnames(z) <- tmp$subj
 
 ========================================================
 ```{r}
-pheatmap(z, cellwidth = 20, cellheight = 10,cluster_rows=F, cluster_cols=F, 
-         legend=TRUE)
+pheatmap(z, cellwidth = 20, cellheight = 10, cluster_rows=F, cluster_cols=F, legend=TRUE)
 ```
-
+**I'm not going to change this in your code, but you might not want to specify cell width and height here. The defaults look pretty good, and on my laptop, I have to make the display window quite a bit bigger to see the edges of the heat map as it is. Also, do you want any sort of label for the probes in the plot? As it is, the viewer/reader won't have any idea which genes are included. 
 ========================================================
