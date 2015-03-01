@@ -126,7 +126,7 @@ if (file.exists(datafile)) {
 
 ```
 ## File stored at: 
-## /tmp/RtmpufPmqx/GPL10558.soft
+## /tmp/Rtmpy7H0rD/GPL10558.soft
 ```
 
 ### Step 2: Only use "Monocyte-derived Macrophage" data
@@ -311,16 +311,18 @@ pheatmap(z, cluster_rows=F, cluster_cols=F, legend=TRUE, color=hmcols, border_co
 ![](HW3_sisily_files/figure-html/unnamed-chunk-13-2.png) 
 
 ```r
-# Use "scale" instead of custom calculated z-score scaling
+# Use original figure_probes.exprs without z-scores, so relabel and sort
 colnames(figure_probes.exprs) <- paste(mmpd$Poly_IC, mmpd$HCV, mmpd$subj, sep="_")
 figure_probes.exprs <- figure_probes.exprs[,order(colnames(figure_probes.exprs))]
+
+# Use "scale" instead of custom calculated z-score scaling
 pheatmap(figure_probes.exprs, cluster_rows=F, cluster_cols=F, scale="row", legend=TRUE, color=hmcols, show_rownames=FALSE, border_color=NA)
 ```
 
 ![](HW3_sisily_files/figure-html/unnamed-chunk-13-3.png) 
 
 ```r
-# Set clustering_distance_rows to euclidean
+# Set clustering_distance_rows to euclidean and use "ward" clustering_method
 pheatmap(figure_probes.exprs, cluster_rows=T, cluster_cols=F, scale="row", legend=TRUE, color=hmcols, clustering_method="ward", show_rownames=FALSE, treeheight_row=0, clustering_distance_rows="euclidean", border_color=NA)
 ```
 
