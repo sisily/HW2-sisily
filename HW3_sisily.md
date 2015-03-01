@@ -1,10 +1,10 @@
-# HW2-sisily
-Shirley Chang  
+# Example: Differential Expression and Heatmap
+Brian High  
 3/1/2015  
 
 ## Assignment
 
-Reproduce the Figure 2 of the following paper: 
+Reproduce Figure 2 of the following paper: 
 http://www.ncbi.nlm.nih.gov/pubmed/23220997
 
 1. Get the data from GEO
@@ -12,16 +12,22 @@ http://www.ncbi.nlm.nih.gov/pubmed/23220997
 3. Use limma to test for differential expression
 4. Display the results using a heatmap [Hint: Use the pheatmap package]
 
+## Using Shirley Chang's analysis code
+
+The majority of the code used for this example was adapted, with permission, 
+from the Github repository of Shirley Chang - 
+[sisily](https://github.com/sisily/HW2-sisily).
+
 ## Set up
 
 
 ```r
 # Set some global knitr options
 library("knitr")
-opts_chunk$set(tidy=FALSE, cache=TRUE, messages=FALSE, fig.width=5, fig.height=7)
+opts_chunk$set(tidy=FALSE, cache=FALSE, messages=FALSE, fig.width=5, fig.height=7)
 ```
 
-### Install the needed packages.
+### Install and load the needed packages
 
 
 ```r
@@ -34,29 +40,69 @@ source("http://bioconductor.org/biocLite.R")
 ```
 
 ```r
-for (pkg in packages)
-{
-    require(pkg, character.only = TRUE) || biocLite(pkg) 
+for (pkg in packages) { 
+    require(pkg, character.only = TRUE) || { 
+        biocLite(pkg) && library(pkg, character.only = TRUE)
+    }
 }
 ```
 
 ```
+## Loading required package: GEOquery
+## Loading required package: Biobase
+## Loading required package: BiocGenerics
+## Loading required package: parallel
+## 
+## Attaching package: 'BiocGenerics'
+## 
+## The following objects are masked from 'package:parallel':
+## 
+##     clusterApply, clusterApplyLB, clusterCall, clusterEvalQ,
+##     clusterExport, clusterMap, parApply, parCapply, parLapply,
+##     parLapplyLB, parRapply, parSapply, parSapplyLB
+## 
+## The following object is masked from 'package:stats':
+## 
+##     xtabs
+## 
+## The following objects are masked from 'package:base':
+## 
+##     Filter, Find, Map, Position, Reduce, anyDuplicated, append,
+##     as.data.frame, as.vector, cbind, colnames, do.call,
+##     duplicated, eval, evalq, get, intersect, is.unsorted, lapply,
+##     mapply, match, mget, order, paste, pmax, pmax.int, pmin,
+##     pmin.int, rank, rbind, rep.int, rownames, sapply, setdiff,
+##     sort, table, tapply, union, unique, unlist, unsplit
+## 
+## Welcome to Bioconductor
+## 
+##     Vignettes contain introductory material; view with
+##     'browseVignettes()'. To cite Bioconductor, see
+##     'citation("Biobase")', and for packages 'citation("pkgname")'.
+## 
+## Setting options('download.file.method.GEOquery'='curl')
 ## Loading required package: reshape
-```
-
-### Load all packages that we need:
-
-
-```r
-library(GEOquery)
-library(reshape)
-library(limma)
-library(pheatmap)
+## Loading required package: limma
+## 
+## Attaching package: 'limma'
+## 
+## The following object is masked from 'package:BiocGenerics':
+## 
+##     plotMA
+## 
+## Loading required package: pheatmap
+## Loading required package: gplots
+## 
+## Attaching package: 'gplots'
+## 
+## The following object is masked from 'package:stats':
+## 
+##     lowess
 ```
 
 ## Process the data that we want
 
-### Step 1: get the data
+### Step 1: Get the data
 
 
 ```r
@@ -70,28 +116,24 @@ datafile <- paste(c(datadir, accession, "_series_matrix.txt.gz"), collapse = "")
 
 # Download the datafile if it does not already exist and load into eset
 if (file.exists(datafile)) {
+    # Load the data from the previously downloaded data file using getGEO
     gds <- getGEO(filename = datafile) # getGEO returns an "S4" object
 } else {
+    # Query GEO for the GEO object matching the accession number
     gds <- getGEO(accession, destdir = datadir)[[1]]  # getGEO returns a "list"
 }
 ```
 
 ```
-## ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE40nnn/GSE40812/matrix/
-## Found 1 file(s)
-## GSE40812_series_matrix.txt.gz
 ## File stored at: 
-## ./Data/GEO//GPL10558.soft
+## /tmp/RtmpufPmqx/GPL10558.soft
 ```
+
+### Step 2: Only use "Monocyte-derived Macrophage" data
+
 
 ```r
 pd<-pData(gds)
-```
-
-### Step 2: only use "Monocyte-derived Macrophage" data
-
-
-```r
 mmpd <- pd[pd$source_name_ch1=="Monocyte-derived Macrophage",]
 rownames(mmpd)
 ```
@@ -117,44 +159,46 @@ mmeset <- gds[,rownames(mmpd)]
 ```r
 mmpd$subj <- substring(gsub("^[A-Z][A-Z][0-9]+_","",mmpd[,'title']),1,4)
 mmpd$HCV <- gsub(".*: ", "", mmpd$characteristics_ch1)
-mmpd$HCV <- factor(ifelse(mmpd$HCV =="Neg", 1, 2))
+mmpd$HCV <- factor(ifelse(mmpd$HCV =="Neg","neg","pos"))
 mmpd$Poly_IC <- tolower(gsub(".*: ","", mmpd$characteristics_ch1.2))
-mmpd$Poly_IC<- factor(ifelse(mmpd$Poly_IC == "mock",1,2))
+mmpd$Poly_IC <- factor(ifelse(mmpd$Poly_IC == "mock","mock","polyic"))
+mmpd <- mmpd[,c('geo_accession','subj','Poly_IC','HCV')]
 ```
 
-### Step 4: use limma to design matrix for treatment
+### Step 4: Use limma to design matrix for treatment
 
-Get the probes that are differentially expressed between the "treatment" groups (p<0.05 and a fold change of > 1.5)
+Get the probes that are differentially expressed between the "treatment" 
+groups (p<0.05 and a fold change of > 1.5)
 
 
 ```r
 mm_tx <- model.matrix(~Poly_IC,mmpd)
 fit_tx <- lmFit(exprs(mmeset), mm_tx)
 ebay_tx <- eBayes(fit_tx)
-top_tx <- topTable(ebay_tx, coef="Poly_IC2", number=Inf)
+top_tx <- topTable(ebay_tx, coef="Poly_ICpolyic", number=Inf)
 probes_tx <- top_tx[top_tx$adj.P.Val < 0.05 & abs(top_tx$logFC)>log2(1.5), ]
-nrow(probes_tx)# getting 1146 probes
+nrow(probes_tx) # getting 1146 probes
 ```
 
 ```
 ## [1] 1146
 ```
 
-### Step 5: subset the pData by Poly_IC value
+### Step 5: Subset the pData by Poly_IC value
 
 
 
 ```r
-info <- mmpd[,c('geo_accession','subj','Poly_IC','HCV')]
-# Poly_IC = 1 is mock
-info$Poly_IC <- ifelse(info$Poly_IC == 1, -1, 1) 
+mmpd$Poly_IC_Int <- ifelse(mmpd$Poly_IC == "mock", -1, 1) 
 exprs.probes_tx <- exprs(mmeset)[rownames(probes_tx),]
+
 # Each subject has 2 GEO numbers: one corresponds to a mock and the other 
 # a poly value (-1 is mock and 1 is poly)
-info.cast <- cast(info, subj~geo_accession, value = "Poly_IC")
-rownames(info.cast) <- info.cast[,'subj']
-info.cast[is.na(info.cast)] <- 0
-exprs.probes_tx.diff <- exprs.probes_tx%*%t(info.cast)
+
+mmpd.cast <- cast(mmpd, subj~geo_accession, value = "Poly_IC_Int")
+rownames(mmpd.cast) <- mmpd.cast[,'subj']
+mmpd.cast[is.na(mmpd.cast)] <- 0
+exprs.probes_tx.diff <- exprs.probes_tx%*%t(mmpd.cast)
 nrow(exprs.probes_tx.diff); ncol(exprs.probes_tx.diff)
 ```
 
@@ -166,25 +210,29 @@ nrow(exprs.probes_tx.diff); ncol(exprs.probes_tx.diff)
 ## [1] 20
 ```
 
-### Step 6: design matrix again for HCV 
+### Step 6: Design matrix again for HCV 
 
-Find the probes that are differentially expressed between HCV+ anf HCV- (p<0.1)
+Find the probes that are differentially expressed between HCV+ and HCV- (p<0.1)
 
 The expression data is ordered by subject ID.
 
 
 ```r
-info.ordered <- unique(info[,c('subj','HCV')])
-info.ordered <- info.ordered[order(info.ordered$subj),] 
+mmpd.ordered <- unique(mmpd[,c('subj','HCV')])
+mmpd.ordered <- mmpd.ordered[order(mmpd.ordered$subj),] 
 ```
+
+Test differential expressed between HCV+ and HCV-.
 
 
 ```r
-mm_HCV <- model.matrix(~HCV,info.ordered)
+mm_HCV <- model.matrix(~HCV,mmpd.ordered)
 fit_HCV <- lmFit(exprs.probes_tx.diff, mm_HCV)
 ebay_HCV <- eBayes(fit_HCV)
-Top_HCV <- topTable(ebay_HCV, coef="HCV2", number=Inf)
+Top_HCV <- topTable(ebay_HCV, coef="HCVpos", number=Inf)
 ```
+
+Only include probes with differential expression P values less than 0.1.
 
 
 ```r
@@ -197,9 +245,11 @@ length(figure_probes) # probe number =43
 ## [1] 43
 ```
 
-## Reproduce the Figure 2 of the paper using heatmap: 
+## Reproduce Figure 2 of the paper using heatmap
 
-### Step 1: calculate the z value of each probes
+### Step 1: Calculate the z value of each probe
+
+This will allow us to manually apply z-score scaling.
 
 
 ```r
@@ -224,21 +274,23 @@ z <- rep(0,40)
 z <- z[-1,]
 ```
 
-### Step 2: use pheatmap to create the figure 
+### Step 2: Use pheatmap to create the figure 
 
-Rename the columns, sort the columns, and create the heatmap.
+Rename the columns, then sort the columns, and create the heatmap.
 
 
 ```r
-# Use descriptive column names instead of creating the labeled dendrogram
+# Use more descriptive column names instead of creating the labeled dendrogram
 colnames(z) <- paste(mmpd$Poly_IC, mmpd$HCV, mmpd$subj, sep="_")
+
 # Sort by column name (which is by treatment, infection status, and subject)
 z <- z[,order(colnames(z))]
+
 # Produce the heatmap using pheatmap, preserving column and row order
 pheatmap(z, cluster_rows=F, cluster_cols=F, legend=TRUE)
 ```
 
-![](HW3_sisily_files/figure-html/unnamed-chunk-13-1.png) 
+![](HW3_sisily_files/figure-html/unnamed-chunk-12-1.png) 
 
 Produce some alternate heatmaps for practice.
 
@@ -249,14 +301,14 @@ hmcols<-colorRampPalette(c("red", "orange", "lightyellow"))(20)
 pheatmap(z, cluster_rows=F, cluster_cols=F, legend=TRUE, color=hmcols)
 ```
 
-![](HW3_sisily_files/figure-html/unnamed-chunk-14-1.png) 
+![](HW3_sisily_files/figure-html/unnamed-chunk-13-1.png) 
 
 ```r
 # Remove grey border
 pheatmap(z, cluster_rows=F, cluster_cols=F, legend=TRUE, color=hmcols, border_color=NA)
 ```
 
-![](HW3_sisily_files/figure-html/unnamed-chunk-14-2.png) 
+![](HW3_sisily_files/figure-html/unnamed-chunk-13-2.png) 
 
 ```r
 # Use "scale" instead of custom calculated z-score scaling
@@ -265,7 +317,7 @@ figure_probes.exprs <- figure_probes.exprs[,order(colnames(figure_probes.exprs))
 pheatmap(figure_probes.exprs, cluster_rows=F, cluster_cols=F, scale="row", legend=TRUE, color=hmcols, show_rownames=FALSE, border_color=NA)
 ```
 
-![](HW3_sisily_files/figure-html/unnamed-chunk-14-3.png) 
+![](HW3_sisily_files/figure-html/unnamed-chunk-13-3.png) 
 
 ```r
 # Set clustering_distance_rows to euclidean
@@ -276,7 +328,7 @@ pheatmap(figure_probes.exprs, cluster_rows=T, cluster_cols=F, scale="row", legen
 ## The "ward" method has been renamed to "ward.D"; note new "ward.D2"
 ```
 
-![](HW3_sisily_files/figure-html/unnamed-chunk-14-4.png) 
+![](HW3_sisily_files/figure-html/unnamed-chunk-13-4.png) 
 
 ```r
 # Set clustering_distance_rows to euclidean manually
@@ -288,7 +340,7 @@ pheatmap(figure_probes.exprs, cluster_rows=T, cluster_cols=F, scale="row", legen
 ## The "ward" method has been renamed to "ward.D"; note new "ward.D2"
 ```
 
-![](HW3_sisily_files/figure-html/unnamed-chunk-14-5.png) 
+![](HW3_sisily_files/figure-html/unnamed-chunk-13-5.png) 
 
 ```r
 # Using heatmap.2
@@ -304,4 +356,4 @@ heatmap.2(figure_probes.exprs, scale="row", dendrogram = "none",
           )
 ```
 
-![](HW3_sisily_files/figure-html/unnamed-chunk-14-6.png) 
+![](HW3_sisily_files/figure-html/unnamed-chunk-13-6.png) 
